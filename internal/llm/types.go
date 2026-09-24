@@ -35,6 +35,12 @@ type Usage struct {
 	TotalToken       int `json:"total_token"`
 }
 
+func (u *Usage) Add(other Usage) {
+	u.PromptTokens += other.PromptTokens
+	u.CompletionTokens += other.CompletionTokens
+	u.TotalToken += other.TotalToken
+}
+
 // toolDef 是发给llm 的工具说明, 模型决定决定是否调用和传参
 type ToolDef struct {
 	Type     string      `json:"type"`

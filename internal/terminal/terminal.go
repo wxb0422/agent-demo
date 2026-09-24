@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	ansiReset  = "\033[0m"
-	ansiDim    = "\033[2m"
-	ansiRed    = "\033[31m"
-	ansiYellow = "\033[33m"
+	AnsiReset  = "\033[0m"
+	AnsiDim    = "\033[2m"
+	AnsiRed    = "\033[31m"
+	AnsiYellow = "\033[33m"
 )
 
 type Terminal struct {
@@ -32,7 +32,7 @@ func (t *Terminal) Printf(format string, args ...any) {
 }
 
 func (t *Terminal) Colorf(color, format string, args ...any) {
-	t.Printf(color+format+ansiReset, args...)
+	t.Printf(color+format+AnsiReset, args...)
 }
 
 func (t *Terminal) ReadLine(prompt string) (string, error) {

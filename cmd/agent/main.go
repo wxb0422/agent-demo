@@ -73,7 +73,19 @@ func runTurn(ctx context.Context, term *terminal.Terminal, ag *agent.Agent, inpu
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
-	term.Printf("start\n")
+	term.Printf("\n")
+	res, err := ag.Run(ctx, input)
+	term.Printf("\n")
+
+	if err != nil {
+		if ctx.Err() != nil {
+			term.Colorf(terminal.AnsiDim, "（已中断）\n")
+		}
+		return err
+	}
+
+	term.Colorf(terminal.AnsiDim, "[%d 步 输入%d token, 输出%d token]",
+		res.Step, res.Usage.PromptTokens, res.Usage.CompletionTokens)
 
 	return nil
 }
