@@ -38,7 +38,7 @@ type Result struct {
 }
 
 func NewAgent(cfg *llm.Config, workSpaceDir string, oneLoopMaxStep int) *Agent {
-	llm, err := llm.NewClient(*cfg)
+	largeModel, err := llm.NewClient(*cfg)
 	if err != nil {
 		panic("new llm fail, err:" + err.Error())
 	}
@@ -52,12 +52,18 @@ func NewAgent(cfg *llm.Config, workSpaceDir string, oneLoopMaxStep int) *Agent {
 
 	return &Agent{
 		Opt: Option{
-			LLM:                llm,
+			LLM:                largeModel,
 			SystemPrompt:       systemPrompt(workSpaceDir),
 			MaxSteps:           oneLoopMaxStep,
 			Tools:              toolFactory,
 			ToolsTimeout:       60 * time.Second,
 			MaxToolOutPutBytes: 32 << 10,
+		},
+		history: []llm.Message{
+			{
+				Role:    llm.RoleSystem,
+				Content: systemPrompt(workSpaceDir),
+			},
 		},
 	}
 }
