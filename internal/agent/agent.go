@@ -3,6 +3,7 @@ package agent
 import (
 	"agent-demo/internal/llm"
 	"agent-demo/internal/tool"
+	"agent-demo/internal/tool/builtin"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,7 @@ import (
 )
 
 type ChatModel interface {
-	Stream(ctx context.Context, messages []llm.Message, tools []llm.ToolDef, onText func(string)) (llm.Response, error)
+	Stream(ctx context.Context, messages []llm.Message, tools []llm.ToolDef, onText func(string)) (*llm.Response, error)
 }
 
 type Agent struct {
@@ -36,8 +37,29 @@ type Result struct {
 	Usage llm.Usage // 本轮对话消耗的token
 }
 
-func NewAgent() *Agent {
-	return &Agent{}
+func NewAgent(cfg *llm.Config, workSpaceDir string, oneLoopMaxStep int) *Agent {
+	llm, err := llm.NewClient(*cfg)
+	if err != nil {
+		panic("new llm fail, err:" + err.Error())
+	}
+
+	toolFactory := tool.NewToolsFactory(
+		builtin.CurrentTime(),
+		builtin.Calculator(),
+		builtin.HTTPGet(),
+		builtin.RunCommand(workSpaceDir),
+	)
+
+	return &Agent{
+		Opt: Option{
+			LLM:                llm,
+			SystemPrompt:       systemPrompt(workSpaceDir),
+			MaxSteps:           oneLoopMaxStep,
+			Tools:              toolFactory,
+			ToolsTimeout:       60 * time.Second,
+			MaxToolOutPutBytes: 32 << 10,
+		},
+	}
 }
 
 // run 标识执行一轮input信息
@@ -136,4 +158,15 @@ func safeRun(ctx context.Context, t tool.Tool, args json.RawMessage) (result str
 	}()
 
 	return t.Run(ctx, args)
+}
+
+func systemPrompt(workspace string) string {
+	return fmt.Sprintf(`你是运行在用户终端里的 AI 助手，可以调用工具完成任务。
+
+工作原则：
+- 需要实时信息、文件内容或数值计算时，调用工具获取结果，不要凭记忆编造。
+- 文件类工具的路径相对于工作目录：%s
+- 工具返回 error 时，先分析原因，再调整参数重试或换一种方法。
+- 能并行调用的工具尽量在一次回复中同时调用。
+- 使用中文，回答简洁。`, workspace)
 }

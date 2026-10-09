@@ -15,9 +15,9 @@ type Config struct {
 
 func GetDefaultConfig() *Config {
 	return &Config{
-		BaseURL:  envOrDefault("LLM_BASE_URL", "https://llm.io"),
+		BaseURL:  envOrDefault("LLM_BASE_URL", "https://api.deepseek.com"),
 		ApiKey:   envOrDefault("LLM_API_KEY", ""),
-		Model:    envOrDefault("LLM_MODEL", ""),
+		Model:    envOrDefault("LLM_MODEL", "deepseek-flash"),
 		MaxRetry: 5,
 		HttpCli:  http.DefaultClient,
 	}

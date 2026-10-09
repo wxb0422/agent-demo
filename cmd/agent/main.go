@@ -23,7 +23,8 @@ func main() {
 
 func run() error {
 	workSpace := flag.String("workspace", ".", "workspace to use")
-	//maxStep := flag.Int("max-step", 10, "max step")
+	maxStep := flag.Int("max-step", 10, "max step")
+
 	flag.Parse()
 
 	llmCfg := llm.GetDefaultConfig()
@@ -43,7 +44,7 @@ func run() error {
 	defer rootDir.Close()
 
 	term := terminal.NewTerminal(os.Stdin, os.Stdout)
-	return repl(context.Background(), term, agent.NewAgent())
+	return repl(context.Background(), term, agent.NewAgent(llmCfg, dir, *maxStep))
 }
 
 func repl(ctx context.Context, term *terminal.Terminal, ag *agent.Agent) error {

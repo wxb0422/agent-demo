@@ -135,8 +135,8 @@ func (c *Client) postWithJson(ctx context.Context, body []byte) (*http.Response,
 }
 
 func isRetryableError(err error) bool {
-	apiErr := &ApiError{}
-	if ok := errors.As(err, apiErr); ok {
+	var apiErr *ApiError
+	if ok := errors.As(err, &apiErr); ok {
 		if apiErr.StatusCode == 429 || apiErr.StatusCode >= 500 {
 			return true
 		}

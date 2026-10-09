@@ -32,13 +32,13 @@ type FunctionCall struct {
 type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
-	TotalToken       int `json:"total_token"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 func (u *Usage) Add(other Usage) {
 	u.PromptTokens += other.PromptTokens
 	u.CompletionTokens += other.CompletionTokens
-	u.TotalToken += other.TotalToken
+	u.TotalTokens += other.TotalTokens
 }
 
 // toolDef 是发给llm 的工具说明, 模型决定决定是否调用和传参

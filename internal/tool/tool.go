@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 )
 
 // tool 定义为agent 可以调用的工具
@@ -49,8 +50,9 @@ func NewFuncTool[T any](name, description, schema string, executorFn func(contex
 	}
 }
 
-func (f *Func[T]) WithApproval() {
+func (f *Func[T]) WithApproval() *Func[T] {
 	f.approval = true
+	return f
 }
 
 func (f *Func[T]) Name() string {
@@ -126,4 +128,19 @@ func (f *ToolsFactory) AllToolsDefine() []llm.ToolDef {
 			},
 		})
 	}
+
+	return allDefs
+}
+
+// Truncate 把文本截断到最多 limit 字节，不会切断 UTF-8 字符。
+// 工具输出会原样进入上下文，不限制长度的话很容易撑爆上下文窗口、浪费 token。
+func Truncate(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + fmt.Sprintf("\n...[truncated, showing first %d bytes]", cut)
 }
