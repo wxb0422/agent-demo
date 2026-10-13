@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"agent-demo/internal/agent"
 	"bufio"
 	"fmt"
 	"io"
@@ -42,4 +43,12 @@ func (t *Terminal) ReadLine(prompt string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(line), nil
+}
+
+func (t *Terminal) Hooks() agent.Hooks {
+	return agent.Hooks{
+		OnText: func(delta string) {
+			t.Printf("%s", delta)
+		},
+	}
 }

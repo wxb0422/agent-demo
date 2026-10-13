@@ -15,6 +15,13 @@ type ChatModel interface {
 	Stream(ctx context.Context, messages []llm.Message, tools []llm.ToolDef, onText func(string)) (*llm.Response, error)
 }
 
+type Hooks struct {
+	OnText      func(delta string)
+	OnToolStart func(call llm.ToolCall)
+	OnToolEnd   func(call llm.ToolCall, result string, err error, elapsed time.Duration)
+	Approve     func(ctx context.Context, call llm.ToolCall) bool
+}
+
 type Agent struct {
 	Opt     Option
 	history []llm.Message
@@ -29,6 +36,8 @@ type Option struct {
 	Tools              *tool.ToolsFactory
 	ToolsTimeout       time.Duration
 	MaxToolOutPutBytes int
+
+	Hooks Hooks
 }
 
 type Result struct {
