@@ -43,6 +43,9 @@ func run() error {
 	}
 
 	term := terminal.NewTerminal(os.Stdin, os.Stdout)
+	term.Printf("agent-demo · 模型 %s · 工作目录 %s\n", llmCfg.Model, dir)
+	term.Colorf(terminal.AnsiDim, "命令：  /exit 退出。回答过程中按 Ctrl+C 可中断。\n")
+
 	return repl(context.Background(), term, agent.NewAgent(llmCfg, dir, *maxStep, term))
 }
 
