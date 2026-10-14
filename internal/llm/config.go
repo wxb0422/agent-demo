@@ -19,7 +19,7 @@ func GetDefaultConfig() *Config {
 		ApiKey:   envOrDefault("LLM_API_KEY", ""),
 		Model:    envOrDefault("LLM_MODEL", "deepseek-flash"),
 		MaxRetry: 5,
-		HttpCli:  http.DefaultClient,
+		HttpCli:  nil,
 	}
 }
 

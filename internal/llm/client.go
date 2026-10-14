@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -86,7 +85,7 @@ func (c *Client) postWithRetry(ctx context.Context, body []byte) (*http.Response
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			delay := c.retryBaseDelay<<uint(attempt) - 1
+			delay := c.retryBaseDelay << (uint(attempt) - 1)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -124,7 +123,7 @@ func (c *Client) postWithJson(ctx context.Context, body []byte) (*http.Response,
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
-		msg, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		return nil, &ApiError{
 			StatusCode: resp.StatusCode,
 			Body:       string(msg),
@@ -136,10 +135,8 @@ func (c *Client) postWithJson(ctx context.Context, body []byte) (*http.Response,
 
 func isRetryableError(err error) bool {
 	var apiErr *ApiError
-	if ok := errors.As(err, &apiErr); ok {
-		if apiErr.StatusCode == 429 || apiErr.StatusCode >= 500 {
-			return true
-		}
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusTooManyRequests || apiErr.StatusCode >= 500
 	}
 
 	return true

@@ -37,14 +37,13 @@ func run() error {
 		return err
 	}
 
-	rootDir, err := os.OpenRoot(dir)
-	if err != nil {
-		return errors.New(fmt.Sprintf("open root dir=%s, error=%s", dir, err.Error()))
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("workspace %s is not a directory", dir)
 	}
-	defer rootDir.Close()
 
 	term := terminal.NewTerminal(os.Stdin, os.Stdout)
-	return repl(context.Background(), term, agent.NewAgent(llmCfg, dir, *maxStep))
+	return repl(context.Background(), term, agent.NewAgent(llmCfg, dir, *maxStep, term))
 }
 
 func repl(ctx context.Context, term *terminal.Terminal, ag *agent.Agent) error {
@@ -59,13 +58,14 @@ func repl(ctx context.Context, term *terminal.Terminal, ag *agent.Agent) error {
 		}
 
 		switch line {
+		case "":
+			continue
 		case "/exit":
 			return nil
 		default:
 			if err = runTurn(ctx, term, ag, line); err != nil {
-				return err
+				term.Colorf(terminal.AnsiDim, "✗ %v\n", err)
 			}
-			term.Printf("finish\n")
 		}
 	}
 }
@@ -81,11 +81,12 @@ func runTurn(ctx context.Context, term *terminal.Terminal, ag *agent.Agent, inpu
 	if err != nil {
 		if ctx.Err() != nil {
 			term.Colorf(terminal.AnsiDim, "（已中断）\n")
+			return nil
 		}
 		return err
 	}
 
-	term.Colorf(terminal.AnsiDim, "[%d 步 输入%d token, 输出%d token]",
+	term.Colorf(terminal.AnsiDim, "[%d 步 输入%d token, 输出%d token]\n",
 		res.Step, res.Usage.PromptTokens, res.Usage.CompletionTokens)
 
 	return nil

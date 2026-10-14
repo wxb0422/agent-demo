@@ -6,6 +6,7 @@ import (
 	"agent-demo/internal/tool/builtin"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,11 +16,11 @@ type ChatModel interface {
 	Stream(ctx context.Context, messages []llm.Message, tools []llm.ToolDef, onText func(string)) (*llm.Response, error)
 }
 
-type Hooks struct {
-	OnText      func(delta string)
-	OnToolStart func(call llm.ToolCall)
-	OnToolEnd   func(call llm.ToolCall, result string, err error, elapsed time.Duration)
-	Approve     func(ctx context.Context, call llm.ToolCall) bool
+type Hooks interface {
+	OnText(delta string)
+	OnToolStart(call llm.ToolCall)
+	OnToolEnd(call llm.ToolCall, result string, err error, elapsed time.Duration)
+	Approve(ctx context.Context, call llm.ToolCall) bool
 }
 
 type Agent struct {
@@ -37,7 +38,7 @@ type Option struct {
 	ToolsTimeout       time.Duration
 	MaxToolOutPutBytes int
 
-	Hooks Hooks
+	Hooker Hooks
 }
 
 type Result struct {
@@ -46,7 +47,7 @@ type Result struct {
 	Usage llm.Usage // 本轮对话消耗的token
 }
 
-func NewAgent(cfg *llm.Config, workSpaceDir string, oneLoopMaxStep int) *Agent {
+func NewAgent(cfg *llm.Config, workSpaceDir string, oneLoopMaxStep int, hooker Hooks) *Agent {
 	largeModel, err := llm.NewClient(*cfg)
 	if err != nil {
 		panic("new llm fail, err:" + err.Error())
@@ -67,6 +68,7 @@ func NewAgent(cfg *llm.Config, workSpaceDir string, oneLoopMaxStep int) *Agent {
 			Tools:              toolFactory,
 			ToolsTimeout:       60 * time.Second,
 			MaxToolOutPutBytes: 32 << 10,
+			Hooker:             hooker,
 		},
 		history: []llm.Message{
 			{
@@ -99,7 +101,7 @@ func (a *Agent) loop(ctx context.Context) (*Result, error) {
 
 	var usage llm.Usage
 	for step := 1; step <= a.Opt.MaxSteps; step++ {
-		resp, err := a.Opt.LLM.Stream(ctx, a.history, allToolDefs, nil)
+		resp, err := a.Opt.LLM.Stream(ctx, a.history, allToolDefs, a.Opt.Hooker.OnText)
 		if err != nil {
 			return nil, fmt.Errorf("step %d: %w", step, err)
 		}
@@ -111,8 +113,9 @@ func (a *Agent) loop(ctx context.Context) (*Result, error) {
 		// 没有工具调用，直接返回结果
 		if len(resp.Message.ToolCalls) == 0 {
 			return &Result{
-				Text: resp.Message.Content,
-				Step: step,
+				Text:  resp.Message.Content,
+				Step:  step,
+				Usage: usage,
 			}, nil
 		}
 
@@ -127,24 +130,31 @@ func (a *Agent) runTools(ctx context.Context, calls []llm.ToolCall) []llm.Messag
 	result := make([]llm.Message, len(calls))
 	var wg sync.WaitGroup
 
-	for index, call := range calls {
-		result[index] = llm.Message{
-			Role:       llm.RoleTool,
-			ToolCallID: call.Id,
-		}
+	type prepared struct {
+		index int
+		tool  tool.Tool
+		call  llm.ToolCall
+	}
 
+	var ready []prepared
+	for index, call := range calls {
+		result[index] = llm.Message{Role: llm.RoleTool, ToolCallID: call.Id}
 		t, err := a.prepareTool(ctx, call)
 		if err != nil {
 			result[index].Content = err.Error()
+			a.Opt.Hooker.OnToolEnd(call, "", err, 0)
 			continue
 		}
-
-		wg.Go(func() {
-			result[index].Content = a.executeTool(ctx, t, call)
-		})
+		ready = append(ready, prepared{index, t, call})
 	}
 
+	for _, p := range ready {
+		wg.Go(func() {
+			result[p.index].Content = a.executeTool(ctx, p.tool, p.call)
+		})
+	}
 	wg.Wait()
+
 	return result
 }
 
@@ -154,15 +164,36 @@ func (a *Agent) prepareTool(ctx context.Context, call llm.ToolCall) (tool.Tool, 
 		return nil, fmt.Errorf("tool %s not found", call.Function.Name)
 	}
 
+	if tool.RequiresApprovalWithTool(t) && (a.Opt.Hooker == nil || !a.Opt.Hooker.Approve(ctx, call)) {
+		return nil, errors.New("the user declined to run this tool call")
+	}
+
 	return t, nil
 }
 
 func (a *Agent) executeTool(ctx context.Context, tool tool.Tool, call llm.ToolCall) string {
+	if a.Opt.Hooker != nil {
+		a.Opt.Hooker.OnToolStart(call)
+	}
 	ctx, cancel := context.WithTimeout(ctx, a.Opt.ToolsTimeout)
 	defer cancel()
 
-	result, _ := safeRun(ctx, tool, json.RawMessage(call.Function.Arguments))
-	return result
+	start := time.Now()
+	result, err := safeRun(ctx, tool, json.RawMessage(call.Function.Arguments))
+	return a.finish(call, result, err, time.Since(start))
+}
+
+func (a *Agent) finish(call llm.ToolCall, result string, err error, elapsed time.Duration) string {
+	if a.Opt.Hooker != nil {
+		a.Opt.Hooker.OnToolEnd(call, result, err, elapsed)
+	}
+	if err != nil {
+		return "err: " + err.Error()
+	}
+	if result == "" {
+		return "(no output)"
+	}
+	return tool.Truncate(result, a.Opt.MaxToolOutPutBytes)
 }
 
 func safeRun(ctx context.Context, t tool.Tool, args json.RawMessage) (result string, err error) {
